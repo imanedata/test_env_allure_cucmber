@@ -1,0 +1,1 @@
+npx cucumber-js --config cucumber.js
