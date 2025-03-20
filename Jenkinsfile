@@ -1,5 +1,8 @@
 pipeline {
     agent any
+    parameters {
+        choice(name: 'ENVIRONMENT', choices: ['env1', 'env2', 'all'], description: 'Sélectionnez l\'environnement')
+    }
     stages {
         stage('build and install') {
             agent {
@@ -7,19 +10,19 @@ pipeline {
                     image 'mcr.microsoft.com/playwright:v1.51.0-noble'
                 }
             }
-
             steps {
                 script {
-                    // Create a reports directory (if not already present)
-                    sh 'mkdir -p reports'
-                    
-                    // Install npm dependencies
+                    // Install dependencies
                     sh 'npm ci'
-                    
-                    // Run cucumber tests with a fixed tag and output the results to a JSON file
-                    sh 'npx cucumber-js --tags @login --format json:reports/cucumber-report.json'
-                    
-                    // Stash the allure results directory for post-processing
+
+                    // Run cucumber tests based on the selected environment
+                    if (params.ENVIRONMENT == 'all') {
+                        sh 'npx cucumber-js --config cucumber.js --tags "not @ignore"'
+                    } else {
+                        sh "TAGS='@${params.ENVIRONMENT} and not @ignore' npx cucumber-js --config cucumber.js"
+                    }
+
+                    // Stash the results for post-processing
                     stash name: 'allure-results', includes: 'allure-results/*'
                 }
             }
@@ -27,18 +30,17 @@ pipeline {
     }
     post {
         always {
-            // Unstash the allure results for processing
+            // Unstash the allure results
             unstash 'allure-results'
-            
+
             script {
-                // Run allure report generation and handle it
+                // Generate Allure report
                 allure([
-                    commandline: 'allure',  // You can modify this if you want to use a specific allure command
                     includeProperties: false,
                     jdk: '',
                     properties: [],
                     reportBuildPolicy: 'ALWAYS',
-                    results: [[path: 'allure-results']]  // Path to the Allure results
+                    results: [[path: 'allure-results']] // Path to the results
                 ])
             }
         }
